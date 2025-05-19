@@ -191,12 +191,14 @@ class MainActivity : AppCompatActivity() {
                 Log.e("MainActivity", "Error creating image file: ${ex.message}")
                 null
             }
+
             // Continue only if the File was successfully created
+// In your MainActivity.kt, inside the dispatchTakePictureIntent() function:
             photoFile?.also {
                 photoUri = FileProvider.getUriForFile(
                     this,
-                    "${packageName}.fileprovider",  // Corrected FileProvider authority
-                    it
+                    "${packageName}.fileprovider",
+                    it // Use the File object directly
                 )
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
                 takePictureLauncher.launch(takePictureIntent)
@@ -237,6 +239,9 @@ class MainActivity : AppCompatActivity() {
         // Create an image file name
         val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val storageDir: File? = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+
+        Log.d("StorageDir", "Storage directory: ${storageDir?.absolutePath}") // ADD THIS LINE
+
         return File.createTempFile(
             "JPEG_${timeStamp}_", /* prefix */
             ".jpg", /* suffix */
