@@ -8,9 +8,11 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
 import android.widget.Button
 import android.widget.ImageView
@@ -20,23 +22,23 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.drawable.toBitmap
 import coil.load
+import coil.transform.CircleCropTransformation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     private var photoUri: Uri? = null
     private lateinit var takePictureLauncher: ActivityResultLauncher<Intent>
     private lateinit var selectPictureLauncher: ActivityResultLauncher<Intent>
-    private lateinit var currentPhotoPath: String
+    private var currentPhotoPath: String? = null
 
     // Use a single permission request code
     private val CAMERA_PERMISSION_REQUEST_CODE = 100
@@ -93,7 +95,6 @@ class MainActivity : AppCompatActivity() {
         }
 
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -108,9 +109,14 @@ class MainActivity : AppCompatActivity() {
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode == Activity.RESULT_OK) {
                     // Image captured successfully, set it to the image view
-                    val file = File(currentPhotoPath)
-                    photoUri = Uri.fromFile(file)
-                    imageView.load(photoUri)
+                    currentPhotoPath?.let { path ->
+                        val file = File(path)
+                        photoUri = Uri.fromFile(file)
+                        imageView.load(photoUri) {
+                            crossfade(true)
+                            transformations(CircleCropTransformation()) // Example
+                        }
+                    }
                 } else {
                     // Image capture failed, handle accordingly
                     Toast.makeText(this, "Picture taking cancelled.", Toast.LENGTH_SHORT).show()
@@ -123,7 +129,10 @@ class MainActivity : AppCompatActivity() {
                     val selectedImageUri: Uri? = result.data?.data
                     if (selectedImageUri != null) {
                         photoUri = selectedImageUri
-                        imageView.load(selectedImageUri)
+                        imageView.load(selectedImageUri) {
+                            crossfade(true)
+                            transformations(CircleCropTransformation()) // Example
+                        }
                     }
                 }
             }
@@ -189,11 +198,10 @@ class MainActivity : AppCompatActivity() {
             } catch (ex: IOException) {
                 // Error occurred while creating the File
                 Log.e("MainActivity", "Error creating image file: ${ex.message}")
+                Toast.makeText(this, "Error creating image file.", Toast.LENGTH_SHORT).show() // Inform user
                 null
             }
 
-            // Continue only if the File was successfully created
-// In your MainActivity.kt, inside the dispatchTakePictureIntent() function:
             photoFile?.also {
                 photoUri = FileProvider.getUriForFile(
                     this,
@@ -209,10 +217,11 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+
     //Check storage permission
     private fun checkStoragePermission() {
         // For API level 33 and above, READ_EXTERNAL_STORAGE is deprecated, use READ_MEDIA_IMAGES instead
-        val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
@@ -232,7 +241,6 @@ class MainActivity : AppCompatActivity() {
             requestStoragePermissionLauncher.launch(permission)
         }
     }
-
 
     @Throws(IOException::class)
     private fun createImageFile(): File {
@@ -258,24 +266,31 @@ class MainActivity : AppCompatActivity() {
         selectPictureLauncher.launch(intent)
     }
 
+
     private fun analyzeImage(imageUri: Uri) {
         GlobalScope.launch(Dispatchers.IO) {
             try {
                 val bitmap = uriToBitmap(imageUri) ?: throw IOException("Failed to convert Uri to Bitmap")
-                val response = uploadImage(bitmap)
+                val base64Image = bitmapToBase64(bitmap)  //Convert to Base64.
+                val response = uploadImage(base64Image) //Upload Base64.
+
                 Log.d("Response", response)
+
                 // Parse JSON response and extract the frame type
                 val jsonResponse = JSONObject(response)
                 val frameType = jsonResponse.getString("frame_type") // Adjust key based on your API response
+
                 // Update UI with the result
                 withContext(Dispatchers.Main) {
                     resultTextView.text = "Recommended Frame Shape: $frameType"
+
                     // Load a random image from the corresponding set based on the frameType
-                    val imageResource = getRandomImageResource(frameType)
+                    val imageResource = getRandomImageResource()  // Corrected call here.
                     recommendedImageView.setImageResource(imageResource)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    Log.e("Analysis Error", "Error during image analysis: ${e.message}", e) // Log the error
                     Toast.makeText(this@MainActivity, "Analysis failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
@@ -296,42 +311,53 @@ class MainActivity : AppCompatActivity() {
             val inputStream = contentResolver.openInputStream(uri)
             BitmapFactory.decodeStream(inputStream)
         } catch (e: IOException) {
+            Log.e("Bitmap Conversion Error", "Error converting URI to Bitmap: ${e.message}", e)
             e.printStackTrace()
             null
         }
     }
 
+
+    private fun bitmapToBase64(bitmap: Bitmap): String {
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream)
+        val byteArray = byteArrayOutputStream.toByteArray()
+        return Base64.encodeToString(byteArray, Base64.DEFAULT)
+    }
+
+
     // Upload image to server and get the predicted glasses frame
-    private suspend fun uploadImage(bitmap: Bitmap): String {
+    private suspend fun uploadImage(base64Image: String): String {
         return withContext(Dispatchers.IO) {
-            val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-            val byteArray = stream.toByteArray()
-
-            val requestBody: RequestBody = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("image", "image.jpg",
-                    RequestBody.create("image/jpeg".toMediaTypeOrNull(), byteArray))
-                .build()
-
-            val request: Request = Request.Builder()
-                .url("YOUR_API_ENDPOINT_HERE") // Replace with your actual API endpoint
-                .post(requestBody)
-                .build()
-
-            val client = OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS) // Increase timeout if needed
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build()
             try {
-                val response = client.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    throw IOException("Failed to upload image: ${response.code}")
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS) // Increase timeout if needed
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .build()
+
+                val json = JSONObject().apply {
+                    put("image", base64Image) // Assuming your API expects "image" as the key.
                 }
+
+                val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
+
+                val request: Request = Request.Builder()
+                    .url("YOUR_API_ENDPOINT_HERE") // Replace with your actual API endpoint
+                    .post(requestBody)
+                    .build()
+
+                val response = client.newCall(request).execute()
+
+                if (!response.isSuccessful) {
+                    throw IOException("Failed to upload image: ${response.code} - ${response.message}")
+                }
+
                 response.body?.string() ?: ""
+
             } catch (e: IOException) {
-                throw e
+                Log.e("Upload Error", "Error during image upload: ${e.message}", e)
+                throw e // Re-throw to be caught in the analyzeImage function
             }
         }
     }
