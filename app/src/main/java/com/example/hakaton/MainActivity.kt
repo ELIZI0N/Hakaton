@@ -270,13 +270,8 @@ class MainActivity : AppCompatActivity() {
                 // Update UI with the result
                 withContext(Dispatchers.Main) {
                     resultTextView.text = "Recommended Frame Shape: $frameType"
-                    // Load the corresponding image based on the frameType
-                    val imageResource = when (frameType) {
-                        "round" -> R.drawable.round_frames
-                        "square" -> R.drawable.square_frames
-                        "oval" -> R.drawable.oval_frames
-                        else -> R.drawable.ic_launcher_background // Default image if type not recognized
-                    }
+                    // Load a random image from the corresponding set based on the frameType
+                    val imageResource = getRandomImageResource(frameType)
                     recommendedImageView.setImageResource(imageResource)
                 }
             } catch (e: Exception) {
@@ -285,6 +280,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    // Function to get a random image resource from any of the frame types
+    private fun getRandomImageResource(): Int {
+        val allFrames = listOf(
+            R.drawable.oval_frames, R.drawable.round_frames, R.drawable.square_frames
+        )
+        return allFrames.random()
     }
 
     // Convert Uri to Bitmap
