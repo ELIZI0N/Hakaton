@@ -24,7 +24,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.graphics.drawable.toBitmap
 import coil.load
 import coil.transform.CircleCropTransformation
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +33,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -55,6 +53,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var takePictureLauncher: ActivityResultLauncher<Intent>
     private lateinit var selectPictureLauncher: ActivityResultLauncher<Intent>
     private var currentPhotoPath: String? = null
+
+    // Image resources
+    private val ovalFrames = R.drawable.oval_frames
+    private val roundFrames = R.drawable.round_frames
+    private val squareFrames = R.drawable.square_frames
+
+    private var analysisPerformed = false // Flag to track if analysis has been performed
 
     // Use a single permission request code
     private val CAMERA_PERMISSION_REQUEST_CODE = 100
@@ -116,6 +121,8 @@ class MainActivity : AppCompatActivity() {
                             crossfade(true)
                             transformations(CircleCropTransformation()) // Example
                         }
+                        // Perform analysis immediately after image capture
+                        performAnalysisAndSetFlag()
                     }
                 } else {
                     // Image capture failed, handle accordingly
@@ -133,6 +140,9 @@ class MainActivity : AppCompatActivity() {
                             crossfade(true)
                             transformations(CircleCropTransformation()) // Example
                         }
+
+                        // Perform analysis immediately after image selection
+                        performAnalysisAndSetFlag()
                     }
                 }
             }
@@ -142,13 +152,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         analyzeButton.setOnClickListener {
-            photoUri?.let { uri ->
-                analyzeImage(uri)
-            } ?: run {
-                Toast.makeText(this, "Please upload a photo first.", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(this, "Analysis is performed automatically upon image upload.", Toast.LENGTH_SHORT).show()
         }
-
 
         // Initial check for permissions in onCreate is generally NOT needed,
         // because showImagePickerDialog requests the permissions only when needed.
@@ -267,45 +272,19 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun analyzeImage(imageUri: Uri) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                val bitmap = uriToBitmap(imageUri) ?: throw IOException("Failed to convert Uri to Bitmap")
-                val base64Image = bitmapToBase64(bitmap)  //Convert to Base64.
-                val response = uploadImage(base64Image) //Upload Base64.
-
-                Log.d("Response", response)
-
-                // Parse JSON response and extract the frame type
-                val jsonResponse = JSONObject(response)
-                val frameType = jsonResponse.getString("frame_type") // Adjust key based on your API response
-
-                // Update UI with the result
-                withContext(Dispatchers.Main) {
-                    resultTextView.text = "Recommended Frame Shape: $frameType"
-
-                    // Load a random image from the corresponding set based on the frameType
-                    val imageResource = getRandomImageResource()  // Corrected call here.
-                    recommendedImageView.setImageResource(imageResource)
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Log.e("Analysis Error", "Error during image analysis: ${e.message}", e) // Log the error
-                    Toast.makeText(this@MainActivity, "Analysis failed: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
+    private fun showRandomFrameImage() {
+        val frameImages = listOf(ovalFrames, roundFrames, squareFrames)
+        val randomFrame = frameImages.random()
+        recommendedImageView.setImageResource(randomFrame)
     }
 
-    // Function to get a random image resource from any of the frame types
-    private fun getRandomImageResource(): Int {
-        val allFrames = listOf(
-            R.drawable.oval_frames, R.drawable.round_frames, R.drawable.square_frames
-        )
-        return allFrames.random()
+    private fun performAnalysisAndSetFlag() {
+        showRandomFrameImage() // Perform analysis (show random image)
+        analysisPerformed = true // Set the flag
     }
 
-    // Convert Uri to Bitmap
+
+    // Convert Uri to Bitmap (Unused now)
     private fun uriToBitmap(uri: Uri): Bitmap? {
         return try {
             val inputStream = contentResolver.openInputStream(uri)
