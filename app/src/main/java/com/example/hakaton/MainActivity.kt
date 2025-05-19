@@ -46,7 +46,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var imageView: ImageView
     private lateinit var uploadButton: Button
-    private lateinit var analyzeButton: Button
     private lateinit var resultTextView: TextView
     private lateinit var recommendedImageView: ImageView
     private var photoUri: Uri? = null
@@ -54,23 +53,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var selectPictureLauncher: ActivityResultLauncher<Intent>
     private var currentPhotoPath: String? = null
 
-    // Image resources
     private val ovalFrames = R.drawable.oval_frames
     private val roundFrames = R.drawable.round_frames
     private val squareFrames = R.drawable.square_frames
 
-    private var analysisPerformed = false // Flag to track if analysis has been performed
+    private var analysisPerformed = false
 
-    // Use a single permission request code
-    private val CAMERA_PERMISSION_REQUEST_CODE = 100
-    private val STORAGE_PERMISSION_REQUEST_CODE = 101
-
-    // Use ActivityResultLauncher for camera permission
     private val requestCameraPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
                 Log.i("MainActivity", "Camera permission granted")
-                dispatchTakePictureIntent() // Launch camera if permission granted
+                dispatchTakePictureIntent()
             } else {
                 Log.i("MainActivity", "Camera permission denied")
                 Toast.makeText(
@@ -78,24 +71,21 @@ class MainActivity : AppCompatActivity() {
                     "Camera permission is required to take photos.",
                     Toast.LENGTH_SHORT
                 ).show()
-                // Optionally disable the "Take Photo" option if permission denied
             }
         }
 
-    // Use ActivityResultLauncher for storage permission if needed (API < 33)
     private val requestStoragePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
-                Log.i("MainActivity", "Storage permission granted")
+                Log.i("MainActivity", "Получено разрешение на хранение")
                 selectImageFromGallery() // Launch gallery if permission granted
             } else {
-                Log.i("MainActivity", "Storage permission denied")
+                Log.i("MainActivity", "Отказано в разрешении на хранение")
                 Toast.makeText(
                     this,
-                    "Storage permission is required to access gallery.",
+                    "Для доступа к галерее требуется разрешение на хранение.",
                     Toast.LENGTH_SHORT
                 ).show()
-                // Optionally disable the "Choose from Library" option if permission denied
             }
         }
 
@@ -106,27 +96,23 @@ class MainActivity : AppCompatActivity() {
 
         imageView = findViewById(R.id.imageView)
         uploadButton = findViewById(R.id.uploadButton)
-        analyzeButton = findViewById(R.id.analyzeButton)
         resultTextView = findViewById(R.id.resultTextView)
         recommendedImageView = findViewById(R.id.recommendedImageView)
 
         takePictureLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode == Activity.RESULT_OK) {
-                    // Image captured successfully, set it to the image view
                     currentPhotoPath?.let { path ->
                         val file = File(path)
                         photoUri = Uri.fromFile(file)
                         imageView.load(photoUri) {
                             crossfade(true)
-                            transformations(CircleCropTransformation()) // Example
+                            transformations(CircleCropTransformation())
                         }
-                        // Perform analysis immediately after image capture
                         performAnalysisAndSetFlag()
                     }
                 } else {
-                    // Image capture failed, handle accordingly
-                    Toast.makeText(this, "Picture taking cancelled.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Фотосъемка отменена.", Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -138,10 +124,9 @@ class MainActivity : AppCompatActivity() {
                         photoUri = selectedImageUri
                         imageView.load(selectedImageUri) {
                             crossfade(true)
-                            transformations(CircleCropTransformation()) // Example
+                            transformations(CircleCropTransformation())
                         }
 
-                        // Perform analysis immediately after image selection
                         performAnalysisAndSetFlag()
                     }
                 }
@@ -151,59 +136,45 @@ class MainActivity : AppCompatActivity() {
             showImagePickerDialog()
         }
 
-        analyzeButton.setOnClickListener {
-            Toast.makeText(this, "Analysis is performed automatically upon image upload.", Toast.LENGTH_SHORT).show()
-        }
-
-        // Initial check for permissions in onCreate is generally NOT needed,
-        // because showImagePickerDialog requests the permissions only when needed.
-        // This reduces unnecessary permission prompts.
     }
 
 
     private fun showImagePickerDialog() {
-        val items = arrayOf("Take Photo", "Choose from Library", "Cancel")
+        val items = arrayOf("Сделать снимок", "Выбрать из библиотеки", "Отмена")
         val builder = AlertDialog.Builder(this)
-        builder.setTitle("Add Photo!")
+        builder.setTitle("Добавьте фото!")
         builder.setItems(items) { dialog, item ->
             when (items[item]) {
-                "Take Photo" -> checkCameraPermission() // Check camera permission before launching
-                "Choose from Library" -> checkStoragePermission() // Check storage permission
-                "Cancel" -> dialog.dismiss()
+                "Сделать снимок" -> checkCameraPermission()
+                "Выбрать из библиотеки" -> checkStoragePermission()
+                "Отмена" -> dialog.dismiss()
             }
         }
         builder.show()
     }
 
-    // Check camera permission
     private fun checkCameraPermission() {
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            // Permission already granted
-            Log.i("MainActivity", "Camera permission already granted")
+            Log.i("MainActivity", "Разрешение на использование камеры уже предоставлено")
             dispatchTakePictureIntent()
         } else {
-            // Request permission
-            Log.i("MainActivity", "Requesting camera permission")
+            Log.i("MainActivity", "Запрашивается разрешение камеры")
             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    // Take photo using camera
     private fun dispatchTakePictureIntent() {
         val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        // Ensure that there's a camera activity to handle the intent
         if (takePictureIntent.resolveActivity(packageManager) != null) {
-            // Create the File where the photo should go
             val photoFile: File? = try {
                 createImageFile()
             } catch (ex: IOException) {
-                // Error occurred while creating the File
-                Log.e("MainActivity", "Error creating image file: ${ex.message}")
-                Toast.makeText(this, "Error creating image file.", Toast.LENGTH_SHORT).show() // Inform user
+                Log.e("MainActivity", "Ошибка при создании файла изображения: ${ex.message}")
+                Toast.makeText(this, "Ошибка при создании файла изображения.", Toast.LENGTH_SHORT).show()
                 null
             }
 
@@ -211,21 +182,17 @@ class MainActivity : AppCompatActivity() {
                 photoUri = FileProvider.getUriForFile(
                     this,
                     "${packageName}.fileprovider",
-                    it // Use the File object directly
+                    it
                 )
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
                 takePictureLauncher.launch(takePictureIntent)
             }
         } else {
-            Toast.makeText(this, "No camera app found.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Приложение для камеры не найдено.", Toast.LENGTH_SHORT).show()
         }
     }
 
-
-
-    //Check storage permission
     private fun checkStoragePermission() {
-        // For API level 33 and above, READ_EXTERNAL_STORAGE is deprecated, use READ_MEDIA_IMAGES instead
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
         } else {
@@ -237,35 +204,30 @@ class MainActivity : AppCompatActivity() {
                 permission
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            // Permission already granted
-            Log.i("MainActivity", "Storage permission already granted")
+            Log.i("MainActivity", "Разрешение на хранение уже предоставлено")
             selectImageFromGallery()
         } else {
-            // Request permission
-            Log.i("MainActivity", "Requesting storage permission")
+            Log.i("MainActivity", "Запрашивается разрешение на хранение")
             requestStoragePermissionLauncher.launch(permission)
         }
     }
 
     @Throws(IOException::class)
     private fun createImageFile(): File {
-        // Create an image file name
         val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val storageDir: File? = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
 
-        Log.d("StorageDir", "Storage directory: ${storageDir?.absolutePath}") // ADD THIS LINE
+        Log.d("StorageDir", "Storage directory: ${storageDir?.absolutePath}")
 
         return File.createTempFile(
-            "JPEG_${timeStamp}_", /* prefix */
-            ".jpg", /* suffix */
-            storageDir      /* directory */
+            "JPEG_${timeStamp}_",
+            ".jpg",
+            storageDir
         ).apply {
-            // Save a file: path for use with ACTION_VIEW intents
             currentPhotoPath = absolutePath
         }
     }
 
-    // Select image from gallery
     private fun selectImageFromGallery() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         selectPictureLauncher.launch(intent)
@@ -279,65 +241,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun performAnalysisAndSetFlag() {
-        showRandomFrameImage() // Perform analysis (show random image)
-        analysisPerformed = true // Set the flag
+        showRandomFrameImage()
+        analysisPerformed = true
     }
 
-
-    // Convert Uri to Bitmap (Unused now)
-    private fun uriToBitmap(uri: Uri): Bitmap? {
-        return try {
-            val inputStream = contentResolver.openInputStream(uri)
-            BitmapFactory.decodeStream(inputStream)
-        } catch (e: IOException) {
-            Log.e("Bitmap Conversion Error", "Error converting URI to Bitmap: ${e.message}", e)
-            e.printStackTrace()
-            null
-        }
-    }
-
-
-    private fun bitmapToBase64(bitmap: Bitmap): String {
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream)
-        val byteArray = byteArrayOutputStream.toByteArray()
-        return Base64.encodeToString(byteArray, Base64.DEFAULT)
-    }
-
-
-    // Upload image to server and get the predicted glasses frame
-    private suspend fun uploadImage(base64Image: String): String {
-        return withContext(Dispatchers.IO) {
-            try {
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(30, TimeUnit.SECONDS) // Increase timeout if needed
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    .writeTimeout(30, TimeUnit.SECONDS)
-                    .build()
-
-                val json = JSONObject().apply {
-                    put("image", base64Image) // Assuming your API expects "image" as the key.
-                }
-
-                val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
-
-                val request: Request = Request.Builder()
-                    .url("YOUR_API_ENDPOINT_HERE") // Replace with your actual API endpoint
-                    .post(requestBody)
-                    .build()
-
-                val response = client.newCall(request).execute()
-
-                if (!response.isSuccessful) {
-                    throw IOException("Failed to upload image: ${response.code} - ${response.message}")
-                }
-
-                response.body?.string() ?: ""
-
-            } catch (e: IOException) {
-                Log.e("Upload Error", "Error during image upload: ${e.message}", e)
-                throw e // Re-throw to be caught in the analyzeImage function
-            }
-        }
-    }
 }
